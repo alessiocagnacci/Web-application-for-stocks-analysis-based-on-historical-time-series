@@ -1,8 +1,8 @@
-# App-per-analizzare-titolo-azionario-con-serie-storiche-in-R
-*Applicazione web che permette di scegliere titolo da Yahoo e periodo di analisi e restituisce un analisi attraverso lo studio di ARIMA.*
+# Web application for stocks analysis based on historical time series
+Web application that allows users to select a stock from Yahoo and choose an analysis period, returning an analysis based on ARIMA modeling.
 
-Ho deciso di creare un app per rendere più facile la modifica del ticker su cui cercare le analisi, precedente svolte nella requisitory "Analisi di un titolo azionario usando modelli ARIMA". 
+I decided to create an app to make it easier to change the ticker used for the analysis previously carried out in the repository “Analysis of a stock using ARIMA models.”
 
-Ho usato la libreria shiny per creare l'applicazione, lubridate per facilitare la conversione delle date future e zoo per risolvere un problema dato dall'utilzzo dei dati mensili.
+I used the shiny library to build the application, lubridate to simplify the conversion of future dates, and zoo to solve an issue related to the use of monthly data.
 
-Ho pure aggiunto un eveluzione che utilizza oltre al modello ARIMA il metodo ETS in modo da avere un analisi più accurata.
+I also added an extension that, in addition to the ARIMA model, applies the ETS method in order to obtain a more accurate analysis.
