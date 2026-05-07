@@ -39,12 +39,12 @@ server <- function(input, output) {
     })
   })
   
-  get_log_series <- function(prezzi, freq) {
+  get_log_series <- function(price, freq) {
     if (freq == "Monthly") {
-      serie_xts <- log(to.monthly(prezzi, indexAt = "lastof", OHLC = FALSE))
+      serie_xts <- log(to.monthly(price, indexAt = "lastof", OHLC = FALSE))
       lag <- "1 month"
     } else {
-      serie_xts <- log(prezzi)
+      serie_xts <- log(price)
       lag <- "1 day"
     }
     serie_xts <- na.omit(serie_xts)
