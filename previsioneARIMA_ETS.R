@@ -7,17 +7,17 @@ library(lubridate)
 library(zoo)
 
 ui <- fluidPage(
-  titlePanel("📊 Previsioni ARIMA & ETS con data previsione target"),
+  titlePanel("Forecast ARIMA & ETS with target data"),
   sidebarLayout(
     sidebarPanel(
       textInput("symbol", "Ticker Yahoo Finance:", value = "AAPL"),
-      dateRangeInput("daterange", "Seleziona intervallo storico:",
+      dateRangeInput("daterange", "Select historical period:",
                      start = "2018-01-01", end = Sys.Date(),
                      min = "2000-01-01", max = Sys.Date()),
-      selectInput("freq", "Frequenza:", choices = c("Giornaliera", "Mensile")),
-      dateInput("forecast_date", "Data di previsione target:", value = as.Date("2025-12-31"),
+      selectInput("freq", "Frequency:", choices = c("Daily", "Monthly")),
+      dateInput("forecast_date", "Target date:", value = as.Date("2025-12-31"),
                 min = Sys.Date()),
-      actionButton("go", "Esegui Analisi")
+      actionButton("go", "Start analysis")
     ),
     mainPanel(
       plotOutput("forecastPlot"),
@@ -30,7 +30,7 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
-  dati <- eventReactive(input$go, {
+  data <- eventReactive(input$go, {
     symbol <- toupper(input$symbol)
     tryCatch({
       getSymbols(symbol, from = input$daterange[1], to = input$daterange[2], auto.assign = FALSE)
@@ -40,23 +40,23 @@ server <- function(input, output) {
   })
   
   get_log_series <- function(prezzi, freq) {
-    if (freq == "Mensile") {
+    if (freq == "Monthly") {
       serie_xts <- log(to.monthly(prezzi, indexAt = "lastof", OHLC = FALSE))
-      passo <- "1 month"
+      lag <- "1 month"
     } else {
       serie_xts <- log(prezzi)
-      passo <- "1 day"
+      lag <- "1 day"
     }
     serie_xts <- na.omit(serie_xts)
-    list(xts = serie_xts, passo = passo)
+    list(xts = serie_xts, lag = lag)
   }
   
   model_data <- reactive({
-    req(dati())
-    prezzi <- Ad(dati())
-    log_data <- get_log_series(prezzi, input$freq)
+    req(data())
+    price <- Ad(data())
+    log_data <- get_log_series(price, input$freq)
     serie_xts <- log_data$xts
-    passo <- log_data$passo
+    lag <- log_data$lag
     
     n <- nrow(serie_xts)
     if (n < 20) return(NULL)
@@ -64,9 +64,9 @@ server <- function(input, output) {
     last_date <- index(serie_xts)[n]
     forecast_date <- input$forecast_date
     
-    if (input$freq == "Giornaliera") {
+    if (input$freq == "Daily") {
       h <- as.numeric(forecast_date - last_date)
-    } else if (input$freq == "Mensile") {
+    } else if (input$freq == "Monthly") {
       h <- 12 * (year(forecast_date) - year(last_date)) + (month(forecast_date) - month(last_date))
     } else {
       h <- 15
@@ -76,7 +76,7 @@ server <- function(input, output) {
     
     train <- serie_xts[1:(n - h)]
     test <- if (n > h) serie_xts[(n - h + 1):n] else NULL
-    freq <- if (input$freq == "Mensile") 12 else 5
+    freq <- if (input$freq == "Monthly") 12 else 5
     
     # Modello ARIMA
     mod_arima <- auto.arima(ts(coredata(train), frequency = freq))
@@ -96,7 +96,7 @@ server <- function(input, output) {
       train = train,
       test = test,
       future_dates = future_dates,
-      passo = passo
+      lag = lag
     )
   })
   
@@ -105,27 +105,27 @@ server <- function(input, output) {
     req(md)
     
     df_plot <- data.frame(
-      Data = md$future_dates,
-      Previsione_ARIMA = as.numeric(exp(md$fc_arima$mean)),
+      Date = md$future_dates,
+      Forecast_ARIMA = as.numeric(exp(md$fc_arima$mean)),
       Lower_ARIMA = as.numeric(exp(md$fc_arima$lower[,2])),
       Upper_ARIMA = as.numeric(exp(md$fc_arima$upper[,2])),
-      Previsione_ETS = as.numeric(exp(md$fc_ets$mean)),
+      Forecast_ETS = as.numeric(exp(md$fc_ets$mean)),
       Lower_ETS = as.numeric(exp(md$fc_ets$lower[,2])),
       Upper_ETS = as.numeric(exp(md$fc_ets$upper[,2])),
-      Reale = if(!is.null(md$test)) as.numeric(exp(md$test)) else NA
+      Actual = if(!is.null(md$test)) as.numeric(exp(md$test)) else NA
     )
     
-    ggplot(df_plot, aes(x = Data)) +
-      geom_line(aes(y = Previsione_ARIMA, color = "ARIMA"), size = 1.2) +
+    ggplot(df_plot, aes(x = Date)) +
+      geom_line(aes(y = Forecast_ARIMA, color = "ARIMA"), size = 1.2) +
       geom_ribbon(aes(ymin = Lower_ARIMA, ymax = Upper_ARIMA, fill = "ARIMA"), alpha = 0.2) +
-      geom_line(aes(y = Previsione_ETS, color = "ETS"), size = 1.2) +
+      geom_line(aes(y = Forecast_ETS, color = "ETS"), size = 1.2) +
       geom_ribbon(aes(ymin = Lower_ETS, ymax = Upper_ETS, fill = "ETS"), alpha = 0.2) +
       geom_line(aes(y = Reale), color = "darkgreen", linetype = "dashed", size = 1.2, na.rm = TRUE) +
-      scale_color_manual(name = "Modelli", values = c("ARIMA" = "blue", "ETS" = "red")) +
-      scale_fill_manual(name = "Intervalli", values = c("ARIMA" = "lightblue", "ETS" = "pink")) +
-      labs(title = paste0("Previsioni ARIMA vs ETS (", input$freq, ") per ", toupper(input$symbol)),
-           subtitle = "Blu = ARIMA | Rosso = ETS | Verde = osservato",
-           x = "Data", y = "Prezzo ($)") +
+      scale_color_manual(name = "Models", values = c("ARIMA" = "blue", "ETS" = "red")) +
+      scale_fill_manual(name = "Interval", values = c("ARIMA" = "lightblue", "ETS" = "pink")) +
+      labs(title = paste0("Forecast ARIMA vs ETS (", input$freq, ") per ", toupper(input$symbol)),
+           subtitle = "Blu = ARIMA | Rosso = ETS | Verde = actual",
+           x = "Date", y = "Price ($)") +
       theme_minimal()
   })
   
@@ -133,10 +133,10 @@ server <- function(input, output) {
     md <- model_data()
     req(md)
     par(mfrow = c(2,2))
-    Acf(residuals(md$mod_arima), main = "ACF residui ARIMA")
-    Pacf(residuals(md$mod_arima), main = "PACF residui ARIMA")
-    Acf(residuals(md$mod_ets), main = "ACF residui ETS")
-    Pacf(residuals(md$mod_ets), main = "PACF residui ETS")
+    Acf(residuals(md$mod_arima), main = "ACF ARIMA")
+    Pacf(residuals(md$mod_arima), main = "PACF ARIMA")
+    Acf(residuals(md$mod_ets), main = "ACF ETS")
+    Pacf(residuals(md$mod_ets), main = "PACF ETS")
     par(mfrow = c(1,1))
   })
   
