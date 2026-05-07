@@ -7,17 +7,17 @@ library(lubridate)
 library(zoo)
 
 ui <- fluidPage(
-  titlePanel("📊 Previsioni ARIMA con data previsione target"),
+  titlePanel("Forecast ARIMA with target data"),
   sidebarLayout(
     sidebarPanel(
       textInput("symbol", "Ticker Yahoo Finance:", value = "AAPL"),
-      dateRangeInput("daterange", "Seleziona intervallo storico:",
+      dateRangeInput("daterange", "Historical range:",
                      start = "2018-01-01", end = Sys.Date(),
                      min = "2000-01-01", max = Sys.Date()),
-      selectInput("freq", "Frequenza:", choices = c("Giornaliera", "Mensile")),
-      dateInput("forecast_date", "Data di previsione target:", value = as.Date("2025-12-31"),
+      selectInput("freq", "Frequences:", choices = c("Daily", "Monthly")),
+      dateInput("forecast_date", "Target date:", value = as.Date("2025-12-31"),
                 min = Sys.Date()),
-      actionButton("go", "Esegui Analisi")
+      actionButton("go", "Start analysis")
     ),
     mainPanel(
       plotOutput("forecastPlot"),
@@ -30,7 +30,7 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
-  dati <- eventReactive(input$go, {
+  data <- eventReactive(input$go, {
     symbol <- toupper(input$symbol)
     tryCatch({
       getSymbols(symbol, from = input$daterange[1], to = input$daterange[2], auto.assign = FALSE)
@@ -39,24 +39,24 @@ server <- function(input, output) {
     })
   })
   
-  get_log_series <- function(prezzi, freq) {
-    if (freq == "Mensile") {
-      serie_xts <- log(to.monthly(prezzi, indexAt = "lastof", OHLC = FALSE))
-      passo <- "1 month"
+  get_log_series <- function(price, freq) {
+    if (freq == "Monthly") {
+      serie_xts <- log(to.monthly(price, indexAt = "lastof", OHLC = FALSE))
+      lag <- "1 month"
     } else {
-      serie_xts <- log(prezzi)
-      passo <- "1 day"
+      serie_xts <- log(price)
+      lag <- "1 day"
     }
     serie_xts <- na.omit(serie_xts)
-    list(xts = serie_xts, passo = passo)
+    list(xts = serie_xts, lag = lag)
   }
   
   model_data <- reactive({
-    req(dati())
-    prezzi <- Ad(dati())
-    log_data <- get_log_series(prezzi, input$freq)
+    req(data())
+    price <- Ad(data())
+    log_data <- get_log_series(price, input$freq)
     serie_xts <- log_data$xts
-    passo <- log_data$passo
+    lag <- log_data$lag
     
     n <- nrow(serie_xts)
     if (n < 20) return(NULL)  # minimo dati
@@ -65,9 +65,9 @@ server <- function(input, output) {
     forecast_date <- input$forecast_date
     
     # calcolo h in base a frequenza e date
-    if (input$freq == "Giornaliera") {
+    if (input$freq == "Daily") {
       h <- as.numeric(forecast_date - last_date)
-    } else if (input$freq == "Mensile") {
+    } else if (input$freq == "Monthly") {
       h <- 12 * (year(forecast_date) - year(last_date)) + (month(forecast_date) - month(last_date))
     } else {
       h <- 15  # default fallback
@@ -89,7 +89,7 @@ server <- function(input, output) {
       train = train,
       test = test,
       future_dates = future_dates,
-      passo = passo
+      lag = lag
     )
   })
   
@@ -98,20 +98,20 @@ server <- function(input, output) {
     req(md)
     
     df_plot <- data.frame(
-      Data = md$future_dates,
-      Previsione = as.numeric(exp(md$fc$mean)),
+      Date = md$future_dates,
+      Forecast = as.numeric(exp(md$fc$mean)),
       Lower = as.numeric(exp(md$fc$lower[,2])),
       Upper = as.numeric(exp(md$fc$upper[,2])),
-      Reale = if(!is.null(md$test)) as.numeric(exp(md$test)) else NA
+      Actual = if(!is.null(md$test)) as.numeric(exp(md$test)) else NA
     )
     
-    ggplot(df_plot, aes(x = Data)) +
-      geom_line(aes(y = Previsione), color = "blue", size = 1.2) +
+    ggplot(df_plot, aes(x = Date)) +
+      geom_line(aes(y = Forecast), color = "blue", size = 1.2) +
       geom_ribbon(aes(ymin = Lower, ymax = Upper), fill = "lightblue", alpha = 0.4) +
       geom_line(aes(y = Reale), color = "darkgreen", linetype = "dashed", size = 1.2, na.rm = TRUE) +
-      labs(title = paste0("Previsione ARIMA (", input$freq, ") per ", toupper(input$symbol)),
-           subtitle = "Blu = previsione | Verde = osservato",
-           x = "Data", y = "Prezzo ($)") +
+      labs(title = paste0("Forecast ARIMA (", input$freq, ") for ", toupper(input$symbol)),
+           subtitle = "Blue = Predicted | Green = Actual",
+           x = "Date", y = "Price ($)") +
       theme_minimal()
   })
   
@@ -119,10 +119,10 @@ server <- function(input, output) {
     md <- model_data()
     req(md)
     
-    residui <- residuals(md$mod_arima)
+    residual <- residuals(md$mod_arima)
     par(mfrow = c(1,2))
-    Acf(residui, main = "ACF residui")
-    Pacf(residui, main = "PACF residui")
+    Acf(residual, main = "ACF residual")
+    Pacf(residual, main = "PACF residual")
     par(mfrow = c(1,1))
   })
   
